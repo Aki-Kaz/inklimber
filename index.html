@@ -19,6 +19,9 @@ p{margin:4px 0}
 .rec{font-weight:600;color:var(--fg)}
 .tc{display:none}
 @media (min-aspect-ratio:5/4){aside{display:block}#band{display:none}}
+.ph body{align-items:center}
+.ph #cw{width:var(--cw);height:var(--ch);aspect-ratio:auto;max-width:none}
+.ph #band,.ph aside{display:none}
 @media (pointer:coarse){.kb{display:none}.tc{display:block}}
 </style></head><body>
 <aside id="L"><h3>そうさ</h3><p class="kb">←→ / A D　移動<br>Space / W / ↑　ジャンプ<br>足場の端でつかまり→ジャンプで引き上げ<br>クリック　狙ってインクを投げる<br>Z　正面に投げる<br>R　やり直し　M　消音</p><p class="tc">ドラッグ＝移動<br>上へフリック＝ジャンプ<br>タップ＝インクを投げる</p></aside>
@@ -26,13 +29,22 @@ p{margin:4px 0}
 <div id="band"><div class="rec"></div><p class="kb">←→ 移動　Space ジャンプ　クリック インク　Z 正面にインク　R やり直し　M 消音</p><p class="tc">ドラッグ＝移動　上へフリック＝ジャンプ　タップ＝インクを投げる</p></div></div>
 <aside id="R"><h3>きろく</h3><div class="rec"></div><p>登るたびに、ステージの形は変わります。</p></aside>
 <script>
-const W=480,H=720,TOP=-3600,OFF=4200,T=16,FONT='system-ui,"Hiragino Sans","Noto Sans JP",sans-serif',cv=document.getElementById('c'),ctx=cv.getContext('2d'),mt=document.getElementById('mt');
+let H=720;const W=480,TOP=-3600,OFF=4200,T=16,FONT='system-ui,"Hiragino Sans","Noto Sans JP",sans-serif',cv=document.getElementById('c'),ctx=cv.getContext('2d'),mt=document.getElementById('mt');
 const pc=document.createElement('canvas');pc.width=W;pc.height=OFF+260;const px=pc.getContext('2d');
 const rng=s=>()=>{s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
 const hue=y=>Math.round(-y*.1)%360, k={}, pad={};
 let S=1,fc=0;
-function fit(){const r=cv.getBoundingClientRect(),n=Math.max(1,Math.min(2.5,r.width*(window.devicePixelRatio||1)/W));if(Math.abs(n-S)>.05||cv.width!==Math.round(W*n)){S=n;cv.width=Math.round(W*S);cv.height=Math.round(H*S)}}
-addEventListener('resize',fit);
+function fit(){const r=cv.getBoundingClientRect(),n=Math.max(1,Math.min(2.5,r.width*(window.devicePixelRatio||1)/W));if(Math.abs(n-S)>.05||cv.width!==Math.round(W*n)||cv.height!==Math.round(H*n)){S=n;cv.width=Math.round(W*S);cv.height=Math.round(H*S)}}
+// スマホ縦持ち: 画面幅いっぱい・縦は端末の縦横比に合わせて伸ばし(H=720〜1000)、余りが出ても上下中央に置く
+const mqC=matchMedia('(pointer:coarse)'),root=document.documentElement,TOUCH=()=>mqC.matches;
+function layout(){
+ const bw=document.body.clientWidth,bh=document.body.clientHeight,ph=TOUCH()&&bh>0&&bw/bh<1.25;
+ root.classList.toggle('ph',ph);
+ if(ph){H=Math.round(Math.max(720,Math.min(1000,W*bh/bw)));const cw=Math.min(bw,bh*W/H);root.style.setProperty('--cw',cw+'px');root.style.setProperty('--ch',(cw*H/W)+'px')}
+ else H=720;
+ fit();
+}
+addEventListener('resize',layout);addEventListener('orientationchange',()=>setTimeout(layout,250));
 let P,E,I,J,D,pl,st='title',cam,falls=0,best=0,time=0,ink=2,last=0,hm=0,cpY=0,cpX=W/2,cpN=0,fl=0,jq=0;
 // 演出用の状態: 波紋/パーティクル/リング/ポップアップ/ヒットストップ/シェイク/コンボ
 const HK='white-climb-hint-throw';let seen=0,hintT=-1,newRec=0;try{seen=+localStorage.getItem(HK)||0}catch(e){}
@@ -85,6 +97,14 @@ const sfx={
  peak(n){tone(pen(n,262),.25,'triangle',.15);tone(pen(n+2,262),.32,'sine',.11,0,.08)},
  camp(){[0,2,4,7,9].forEach((n,i)=>tone(pen(n+3,262),.22,'triangle',.15,0,i*.06));noise(.25,.08,4500)}
 };
+/* ---------- 振動 (SEと同時。Androidはvibrate、iPhoneはSafariのスイッチ部品の触覚を利用。消音と連動) ---------- */
+const HAS_VIB=typeof navigator.vibrate==='function',IOS=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1),
+ HX=document.createElement('label');
+HX.setAttribute('aria-hidden','true');HX.style.cssText='position:fixed;left:-60px;top:-60px;width:40px;height:40px;opacity:0;pointer-events:none';HX.innerHTML='<input type="checkbox" switch>';
+if(!HAS_VIB&&IOS)document.body.appendChild(HX);
+function vib(p){if(mute||!TOUCH())return;try{if(HAS_VIB)navigator.vibrate(p);else if(IOS){HX.click();if(Array.isArray(p)&&p.length>2)setTimeout(()=>HX.click(),70)}}catch(e){}}
+const VB={jump:10,throw:12,splash:20,land:10,found:15,blind:[25,40,25],stomp:30,item:10,hit:70,thud:80,clear:[40,40,40,40,100],peak:30,camp:[30,40,30,40,60]};
+for(const n in VB){const f=sfx[n];sfx[n]=(...a)=>{f(...a);vib(VB[n])}}
 
 /* ---------- BGM (WebAudioで生成。登るほど楽器が増え、落ちると減る) ---------- */
 const CH=[[0,3,7],[-4,0,3],[3,7,10],[-2,2,5]]; // Am-F-C-G の和音(ペンタトニック寄りで濁らない)
@@ -151,7 +171,7 @@ function init0(){
   if(en){E.push({p,x:p.x+w/2,d:en===1?(r()<.5?-1:1):1,alive:1,y:p.y});gap=0}else gap++;}
  P.push(mk(96,TOP,288));
  pl={x:W/2,y:0,vx:0,vy:0,on:1,face:1,coy:0,inv:0,kb:0,minY:0,sq:0,hang:0,hangT:0,noGrab:0};
- cam=-600;ink=2;time=0;hintT=-1;falls=0;hs=0;shake=0;combo=0;comboT=0;chain=0;found=0;blind=0;hm=0;cpY=0;cpX=W/2;cpN=0;fl=0;
+ cam=-(H-120);ink=2;time=0;hintT=-1;falls=0;hs=0;shake=0;combo=0;comboT=0;chain=0;found=0;blind=0;hm=0;cpY=0;cpX=W/2;cpN=0;fl=0;
 }
 const surf=(p,x)=>p.y+(p.k||0)*(x-p.x-p.w/2); // 足場の表面の高さ(傾きk対応)
 function refill(p){for(let i=0;i<4;i++){const ix=p.x+p.w/2+(i-1.5)*18;I.push({x:ix,y:surf(p,ix)-14,t:i})}} // 補給用インク
@@ -221,12 +241,18 @@ cv.addEventListener('pointerdown',e=>{
  if(st!=='play'){press();return}
  if(e.pointerType==='mouse'){aim(e);return}
  try{cv.setPointerCapture(e.pointerId)}catch(_){}
- tp[e.pointerId]={sx:e.clientX,sy:e.clientY,y0:e.clientY,t0:performance.now(),mv:0,far:0};
+ tp[e.pointerId]={sx:e.clientX,ox:e.clientX,oy:e.clientY,h:[],t0:performance.now(),mv:0,far:0};
 });
-cv.addEventListener('pointermove',e=>{const t=tp[e.pointerId];if(!t)return;
- const dx=e.clientX-t.sx;if(Math.hypot(dx,e.clientY-t.sy)>14)t.far=1;
- t.mv=Math.abs(dx)>14?Math.sign(dx):0;
- if(e.clientY>t.y0)t.y0=e.clientY;else if(t.y0-e.clientY>34){t.y0=e.clientY;jq=.12;pad.j=1;setTimeout(()=>pad.j=0,130)}
+cv.addEventListener('pointermove',e=>{const t=tp[e.pointerId];if(!t){if(e.pointerType==='mouse')cv.style.cursor=btAt(e)?'pointer':'';return}
+ const now=performance.now();
+ if(Math.hypot(e.clientX-t.ox,e.clientY-t.oy)>12)t.far=1;
+ let dx=e.clientX-t.sx;const R=14; // 基準点は指に追従する(最大14px遅れ)ので、向きを変えると約19pxで即反転
+ if(dx>R){t.sx=e.clientX-R;dx=R}else if(dx<-R){t.sx=e.clientX+R;dx=-R}
+ t.mv=Math.abs(dx)>5?Math.sign(dx):0;
+ // 上フリック: 直近160msの最下点より16px以上上へ動いたらジャンプ(ゆっくりのズレでは暴発しない)
+ const h=t.h;h.push([e.clientY,now]);while(h.length&&now-h[0][1]>160)h.shift();
+ let lo=-1e9;for(const q of h)if(q[0]>lo)lo=q[0];
+ if(lo-e.clientY>16){t.h=[[e.clientY,now]];jq=.18;pad.j=1;setTimeout(()=>pad.j=0,170)}
  mv();
 });
 const up=e=>{const t=tp[e.pointerId];if(!t)return;delete tp[e.pointerId];mv();
@@ -234,13 +260,12 @@ const up=e=>{const t=tp[e.pointerId];if(!t)return;delete tp[e.pointerId];mv();
 cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
 // クリア画面のボタン: [x,y,w,h]。シェアはXの投稿画面を開く(タイム・ハッシュタグ・URL入り)
 const BT={share:[70,380,340,48],retry:[70,438,340,48]},GAME_URL='https://aki-kaz.github.io/inklimber/',TAG='インクライマー';
-function btAt(e){if(st!=='clear')return'';const b=cv.getBoundingClientRect(),x=(e.clientX-b.left)*W/b.width,y=(e.clientY-b.top)*H/b.height;
+function btAt(e){if(st!=='clear')return'';const b=cv.getBoundingClientRect(),x=(e.clientX-b.left)*W/b.width,y=(e.clientY-b.top)*H/b.height-(H-720)/2;
  for(const n in BT){const r=BT[n];if(x>=r[0]&&x<=r[0]+r[2]&&y>=r[1]&&y<=r[1]+r[3])return n}return''}
-function shareX(){const t='インクライマーを'+time.toFixed(1)+'秒で登頂！'+(newRec?'（自己ベスト更新）':''),
- u='https://twitter.com/intent/tweet?text='+encodeURIComponent(t)+'&url='+encodeURIComponent(GAME_URL)+'&hashtags='+encodeURIComponent(TAG);
+function shareX(){const t='インクライマーを'+time.toFixed(1)+'秒で登頂！'+(newRec?'（自己ベスト更新）':'')+'\n'+GAME_URL+'\n#'+TAG,
+ u='https://x.com/intent/post?text='+encodeURIComponent(t);
  window.open(u,'_blank','noopener')}
 cv.addEventListener('click',e=>{const b=btAt(e);if(b==='share')shareX();else if(b==='retry'){init();st='play'}});
-cv.addEventListener('pointermove',e=>{if(e.pointerType==='mouse')cv.style.cursor=btAt(e)?'pointer':''});
 document.querySelectorAll('#pad button[data-k]').forEach(b=>{
  const n=b.dataset.k;
  b.addEventListener('pointerdown',e=>{e.preventDefault();pad[n]=1;if(n==='j')jq=.12;if(st!=='play')press()});
@@ -307,7 +332,7 @@ function update(dt){
    const i=Math.floor((d.x-p.x)/T);paint(p,i-1);paint(p,i);paint(p,i+1);d.dead=1;break}
   if(d.len>320)d.dead=1;}
  D=D.filter(d=>!d.dead);
- cam=Math.min(-600,cam+((pl.y-470)-cam)*Math.min(1,dt*6));
+ cam=Math.min(-(H-120),cam+((pl.y-Math.round(H*.65))-cam)*Math.min(1,dt*6));
 }
 // 見た目だけの更新(波紋の塗り広がり・粒・リング・ポップアップ)
 function fx(dt){
@@ -328,7 +353,7 @@ function txt(s,x,y,sz,c){ctx.fillStyle=c||'#222';ctx.font=`bold ${sz}px ${FONT}`
 // 山肌の背景: 遠景の山並み(視差で沈む)・斜めの岩の地層線・両端の岩壁。白を邪魔しない淡さで、色相だけ高度でゆっくり変わる
 function bg(){
  const a=-cam,hh=hue(pl.y);
- for(let L=0;L<3;L++){const b=430+L*70+(a-600)*(.05+L*.04);if(b>H+120)continue;
+ for(let L=0;L<3;L++){const b=430+(H-720)+L*70+(a-(H-120))*(.05+L*.04);if(b>H+120)continue;
   ctx.fillStyle=`hsla(${hh+L*25},35%,${80-L*3}%,.3)`;ctx.beginPath();ctx.moveTo(-12,H);
   for(let x=-12;x<=W+12;x+=24)ctx.lineTo(x,b-34-L*10-26*Math.abs(Math.sin(x*.011+L*2.3))-14*Math.sin(x*.037+L));
   ctx.lineTo(W+12,H);ctx.fill()}
@@ -420,18 +445,19 @@ function render(){
  icon('down',15,46,6,'#6b7280');ctx.textAlign='left';txt(String(falls),27,51,13,'#6b7280');
  if(combo>=2){ctx.textAlign='right';txt('×'+combo,W-44,40,18+Math.min(combo,10)*2,`hsl(${(time*300)%360},85%,45%)`)}
  ctx.textAlign='center';
- if(st==='title'||st==='clear'){
+ if(st==='title'||st==='clear'){ctx.save();ctx.translate(0,(H-720)/2);
   ctx.fillStyle='rgba(255,255,255,.9)';if(st==='clear')ctx.fillRect(30,190,W-60,310);else ctx.fillRect(30,428,W-60,112);
   if(st==='title'){if(LG.complete&&LG.naturalWidth){const lw=410,lh=lw*LG.naturalHeight/LG.naturalWidth;ctx.drawImage(LG,W/2-lw/2,238-lh/2,lw,lh)}
    if(rec.m>0)txt('最高 '+rec.m+'m'+(rec.t?'　ベスト '+rec.t.toFixed(1)+'s':''),W/2,364,13,'#6b7280');
    ctx.globalAlpha=.75+.25*Math.sin(performance.now()/300);txt('タップ/クリック でスタート',W/2,398,17,'#d33');ctx.globalAlpha=1;
-   ['足場をたどって、頂上をめざそう','見えない足場もある。インクを投げて、存在を確かめよう','インクは敵を踏むと手に入る'].forEach((t,i)=>txt(t,W/2,452+i*32,14,'#444'))}
+   ['足場をたどって、頂上をめざそう','見えない足場もある。インクを投げて、存在を確かめよう','インクは敵を踏むと手に入る'].forEach((t,i)=>txt(t,W/2,452+i*32,14,'#444'));
+   if(TOUCH()){ctx.fillStyle='rgba(255,255,255,.9)';ctx.fillRect(30,552,W-60,104);['ドラッグ：左右に移動','上へフリック：ジャンプ','タップ：タップした方向にインクを投げる'].forEach((t,i)=>txt(t,W/2,580+i*30,14,'#444'))}}
   else{txt('登頂成功！',W/2,246,32,'#d33');txt(time.toFixed(1)+'s',W/2,298,26);txt(newRec?'NEW RECORD':'ベスト '+rec.t.toFixed(1)+'s',W/2,320,13,newRec?'#d33':'#6b7280');
    // 結果はアイコン+数字: 手探り着地(星) / 旗 / 落下(矢印)
    [['star',blind,'#e0a800'],['flag',cpN,'#d33'],['down',falls,'#6b7280']].forEach(([t,v,c],i)=>{const x=W/2-90+i*90;icon(t,x-14,344,11,c);ctx.textAlign='left';txt(String(v),x+2,350,20);});
    ctx.textAlign='center';
    [['share','結果をXでシェア！','#111'],['retry','もう一度プレイ！','#d33']].forEach(([n,l,c])=>{const r=BT[n];ctx.fillStyle=c;ctx.beginPath();if(ctx.roundRect)ctx.roundRect(r[0],r[1],r[2],r[3],12);else ctx.rect(r[0],r[1],r[2],r[3]);ctx.fill();txt(l,W/2,r[1]+r[3]/2+6,18,'#fff')})}
- }
+ ctx.restore()}
 }
 // 標高ゲージ(右端): 目盛り=合目、旗=ベースキャンプ、色の帯=自分が塗った高さ、三角=最高到達点、丸=現在地
 function gauge(){
@@ -446,10 +472,10 @@ function gauge(){
  const by=fy(best*10);ctx.fillStyle='rgba(0,0,0,.45)';ctx.beginPath();ctx.moveTo(gx-16,by-4);ctx.lineTo(gx-16,by+4);ctx.lineTo(gx-10,by);ctx.fill();
  const cy=fy(-pl.y);ctx.fillStyle=`hsl(${hue(pl.y)},90%,55%)`;ctx.strokeStyle='#222';ctx.lineWidth=2;ctx.beginPath();ctx.arc(gx,cy,6,0,7);ctx.fill();ctx.stroke();
 }
-function frame(t){requestAnimationFrame(frame);if(!(fc++%20))fit();const dt=Math.min(.033,(t-last)/1000||0);last=t;
+function frame(t){requestAnimationFrame(frame);if(!(fc++%20))layout();const dt=Math.min(.033,(t-last)/1000||0);last=t;
  shake*=Math.exp(-dt*12);if(shake<.2)shake=0;
  if(hs>0)hs-=dt; // ヒットストップ中は世界を止める(描画とシェイクだけ動く)
  else{if(st==='play')update(dt);fx(dt)}
  render()}
-showRec();fit();init();requestAnimationFrame(frame);
+showRec();layout();init();requestAnimationFrame(frame);
 </script></body></html>
